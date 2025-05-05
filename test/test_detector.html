@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Judol Detector</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .test-container {
+            margin-bottom: 20px;
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .comment {
+            margin-bottom: 10px;
+            padding: 10px;
+            background-color: #fff;
+            border-radius: 4px;
+            border-left: 4px solid #ccc;
+        }
+        .judol {
+            border-left: 4px solid #ff6b6b;
+            background-color: #fff0f0;
+        }
+        .not-judol {
+            border-left: 4px solid #51cf66;
+            background-color: #f0fff0;
+        }
+        .result {
+            margin-top: 10px;
+            font-weight: bold;
+        }
+        .reasons {
+            margin-top: 5px;
+            font-size: 0.9em;
+            color: #666;
+        }
+        .confidence {
+            display: inline-block;
+            width: 100%;
+            height: 10px;
+            background-color: #eee;
+            margin-top: 5px;
+        }
+        .confidence-level {
+            height: 100%;
+            background-color: #ff6b6b;
+            transition: width 0.5s ease-in-out;
+        }
+        textarea {
+            width: 100%;
+            min-height: 100px;
+            margin-bottom: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+        }
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            margin: 5px 0;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Test Judol Detector</h1>
+    
+    <div class="test-container">
+        <h2>Uji Komentar</h2>
+        <textarea id="testComment" placeholder="Masukkan komentar yang ingin diuji di sini..."></textarea>
+        <button id="testButton">Uji Komentar</button>
+        <div id="testResult" class="comment">
+            <div class="result">Hasil akan muncul di sini</div>
+        </div>
+    </div>
+    
+    <div class="test-container">
+        <h2>Contoh Komentar</h2>
+        <div id="examples"></div>
+    </div>
+    
+    <script src="../judol_detector.js"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            const detector = new JudolDetector();
+            const testComments = [
+                "Video ini sangat menarik dan informatif!",
+                "Ayo gabung di 𝐷𝐎𝐑𝘈𝟽𝟽 untuk pengalaman terbaik!",
+                "Sumpah penasaran banget kenapa pada bahas 【✌ ☎◼⚪✌㊗⚧17 ✌】 di kolom komentar ?.",
+                "Nggak pernah kecewa sama hasil di 𝘿𝐸W𝐷О𝐑А, semuanya luar biasa!",
+                "Main slot di AERO88 hari ini, JP MAXWIN sampe 200jt! Gacor parah bro.",
+                "Situs ALEXIS17 emang paling mantul, scatter muncul terus!",
+                "dari semua situs, cuma SGI88 yang beneran bayar, sisanya scam semua.",
+                "𝗠𝗢𝗗𝗔𝗟𝗛𝗢𝗞𝗜𝟴𝟴 situs terbaik!",
+                "Mantul kontennya, keren banget videonya!",
+                "☯AL𝐄𝗫𝗜𝗦𝟏𝟕☯ gacor terus, aku dapat maxwin 300jt!"
+            ];
+            
+            // Tampilkan contoh komentar
+            const examplesContainer = document.getElementById('examples');
+            testComments.forEach(comment => {
+                const result = detector.detectJudolComment(comment);
+                const commentClass = result.is_judol ? "judol" : "not-judol";
+                const commentEl = document.createElement('div');
+                commentEl.className = `comment ${commentClass}`;
+                commentEl.innerHTML = `
+                    <div>${comment}</div>
+                    <div class="result">Terdeteksi sebagai ${result.is_judol ? "JUDOL" : "BUKAN JUDOL"}</div>
+                    ${result.is_judol ? `
+                        <div class="confidence">
+                            <div class="confidence-level" style="width: ${result.confidence * 100}%"></div>
+                        </div>
+                        <div class="reasons">
+                            <strong>Confidence:</strong> ${(result.confidence * 100).toFixed(0)}%<br>
+                            <strong>Alasan:</strong><br>
+                            ${result.reasons.map(r => `- ${r}`).join('<br>')}
+                        </div>
+                    ` : ''}
+                `;
+                examplesContainer.appendChild(commentEl);
+            });
+            
+            // Tambahkan logika untuk tombol uji
+            const testButton = document.getElementById('testButton');
+            const testCommentInput = document.getElementById('testComment');
+            const testResultContainer = document.getElementById('testResult');
+            
+            testButton.addEventListener('click', function() {
+                const commentText = testCommentInput.value.trim();
+                if (commentText) {
+                    const result = detector.detectJudolComment(commentText);
+                    const commentClass = result.is_judol ? "judol" : "not-judol";
+                    testResultContainer.className = `comment ${commentClass}`;
+                    testResultContainer.innerHTML = `
+                        <div>${commentText}</div>
+                        <div class="result">Terdeteksi sebagai ${result.is_judol ? "JUDOL" : "BUKAN JUDOL"}</div>
+                        ${result.is_judol ? `
+                            <div class="confidence">
+                                <div class="confidence-level" style="width: ${result.confidence * 100}%"></div>
+                            </div>
+                            <div class="reasons">
+                                <strong>Confidence:</strong> ${(result.confidence * 100).toFixed(0)}%<br>
+                                <strong>Alasan:</strong><br>
+                                ${result.reasons.map(r => `- ${r}`).join('<br>')}
+                            </div>
+                        ` : ''}
+                    `;
+                } else {
+                    testResultContainer.innerHTML = `<div class="result">Silakan masukkan komentar terlebih dahulu</div>`;
+                }
+            });
+        });
+    </script>
+</body>
+</html> 

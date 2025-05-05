@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>Pembersih Komentar Judol</title>
+  <style>
+    body {
+      width: 300px;
+      padding: 15px;
+      font-family: Arial, sans-serif;
+    }
+    h1 {
+      font-size: 18px;
+      color: #333;
+      text-align: center;
+    }
+    .button-container {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: 15px;
+    }
+    button {
+      padding: 10px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: background-color 0.3s;
+    }
+    button:disabled {
+      background-color: #cccccc;
+      color: #666666;
+      cursor: not-allowed;
+    }
+    #scanButton {
+      background-color: #4285f4;
+      color: white;
+    }
+    #scanButton:hover:not(:disabled) {
+      background-color: #2b6bd9;
+    }
+    #removeButton {
+      background-color: #ea4335;
+      color: white;
+    }
+    #removeButton:hover:not(:disabled) {
+      background-color: #d33426;
+    }
+    #stats {
+      margin-top: 15px;
+      padding: 10px;
+      background-color: #f5f5f5;
+      border-radius: 5px;
+    }
+    .toggle-container {
+      display: flex;
+      align-items: center;
+      margin-top: 15px;
+    }
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 48px;
+      height: 24px;
+      margin-right: 10px;
+    }
+    .switch input {
+      opacity: 0;
+      width: 0;
+      height: 0;
+    }
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: #ccc;
+      transition: .4s;
+      border-radius: 24px;
+    }
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .4s;
+      border-radius: 50%;
+    }
+    input:checked + .slider {
+      background-color: #4285f4;
+    }
+    input:checked + .slider:before {
+      transform: translateX(24px);
+    }
+    .info-text {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+      line-height: 1.4;
+    }
+    .info-box {
+      background-color: #e8f0fe;
+      border-left: 4px solid #4285f4;
+      padding: 8px 12px;
+      margin-top: 15px;
+      border-radius: 0 5px 5px 0;
+      font-size: 12px;
+    }
+    .accuracy-controls {
+      margin-top: 15px;
+      padding: 10px;
+      background-color: #f9f9f9;
+      border-radius: 5px;
+      border: 1px solid #ddd;
+    }
+    .accuracy-controls h3 {
+      font-size: 14px;
+      margin-top: 0;
+      margin-bottom: 10px;
+    }
+    .small-button {
+      padding: 5px 10px;
+      font-size: 12px;
+      margin-top: 5px;
+    }
+    .small-button.report {
+      background-color: #fbbc05;
+      color: #000;
+      border: 1px solid #e09900;
+    }
+    .small-button.report:hover {
+      background-color: #e09900;
+    }
+    .feedback-form {
+      margin-top: 10px;
+      display: none;
+    }
+    .feedback-form textarea {
+      width: 100%;
+      height: 60px;
+      resize: vertical;
+      margin-bottom: 10px;
+      padding: 5px;
+      box-sizing: border-box;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .feedback-form button {
+      font-size: 12px;
+    }
+    #reportFalsePositiveForm .small-button {
+      background-color: #34a853;
+      color: white;
+    }
+    #reportMissedJudolForm .small-button {
+      background-color: #ea4335;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+  <h1>Pembersih Komentar Judol</h1>
+  
+  <div class="toggle-container">
+    <label class="switch">
+      <input type="checkbox" id="autoRemove">
+      <span class="slider"></span>
+    </label>
+    <span>Hapus otomatis saat menemukan</span>
+  </div>
+  <p class="info-text">Ketika aktif, komentar judol akan otomatis dihapus saat terdeteksi selama scrolling atau saat komentar baru dimuat.</p>
+  
+  <div class="info-box">
+    Mode otomatis akan terus memindai dan menghapus komentar judol sepanjang waktu, termasuk saat:
+    <ul>
+      <li>Halaman video pertama kali dimuat</li>
+      <li>Anda menggulir ke bawah (load komentar baru)</li>
+      <li>Ada komentar baru yang muncul</li>
+    </ul>
+  </div>
+
+  <div class="button-container">
+    <button id="scanButton">Pindai Komentar Judol</button>
+    <button id="removeButton">Hapus Semua Komentar Judol</button>
+  </div>
+
+  <div id="stats">
+    <p>Status: <span id="statusText">Siap</span></p>
+    <p>Komentar terdeteksi: <span id="detectedCount">0</span></p>
+    <p>Komentar dihapus: <span id="removedCount">0</span></p>
+  </div>
+  
+  <!-- Kontrol akurasi -->
+  <div class="accuracy-controls">
+    <h3>Bantu Tingkatkan Akurasi</h3>
+    <p class="info-text">Jika Anda melihat kesalahan deteksi, bantu kami memperbaikinya:</p>
+    
+    <button id="reportFalsePositive" class="small-button report">Laporkan Kesalahan Deteksi</button>
+    <div id="reportFalsePositiveForm" class="feedback-form">
+      <textarea id="falsePositiveText" placeholder="Tempel komentar normal yang salah terdeteksi sebagai judol di sini"></textarea>
+      <button id="submitFalsePositive" class="small-button">Tambahkan ke Whitelist</button>
+    </div>
+    
+    <button id="reportMissedJudol" class="small-button report">Tambahkan Judol Terlewat</button>
+    <div id="reportMissedJudolForm" class="feedback-form">
+      <textarea id="missedJudolText" placeholder="Tempel komentar judol yang tidak terdeteksi di sini"></textarea>
+      <button id="submitMissedJudol" class="small-button">Tambahkan ke Daftar Judol</button>
+    </div>
+  </div>
+
+  <!-- Bagian Donasi -->
+  <div class="donation-section" style="margin-top: 15px; padding: 10px; background-color: #f0f0f0; border-radius: 5px; text-align: center;">
+    <p style="margin: 0 0 8px 0; font-size: 13px; color: #333;">Suka dengan ekstensi ini? Dukung pengembang:</p>
+    <a href="https://bagibagi.co/pirli" target="_blank" 
+       style="display: inline-block; 
+              padding: 8px 15px; 
+              font-size: 12px; 
+              font-weight: bold; 
+              color: white; 
+              background-color: #28a745; /* Warna hijau */ 
+              border-radius: 5px; 
+              text-decoration: none; 
+              transition: background-color 0.3s;"
+       onmouseover="this.style.backgroundColor='#218838'" 
+       onmouseout="this.style.backgroundColor='#28a745'">
+      ☕ Traktir Kopi (Donasi)
+    </a>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html> 
