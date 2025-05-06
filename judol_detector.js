@@ -75,7 +75,6 @@ class JudolDetector {
   loadDefaultPatterns() {
     // Menambahkan situs judi dari daftar dasar
     this.namaSitusJudiDasar.forEach(site => this.namaSitusJudi.add(site));
-    console.log("Memuat pola default");
   }
   
   /**
@@ -84,13 +83,8 @@ class JudolDetector {
    * @param {Array} whitelistPatterns - Array pola whitelist baru
    */
   updatePatterns(judolPatterns, whitelistPatterns) {
-    // Reset Set agar tidak ada duplikasi
     this.namaSitusJudi = new Set();
-    
-    // Muat ulang dari daftar dasar
     this.namaSitusJudiDasar.forEach(site => this.namaSitusJudi.add(site));
-    
-    // Tambahkan pola-pola baru
     if (judolPatterns && Array.isArray(judolPatterns)) {
       judolPatterns.forEach(pattern => {
         if (pattern && typeof pattern === 'string') {
@@ -98,8 +92,6 @@ class JudolDetector {
         }
       });
     }
-    
-    console.log(`Patterns updated. Total patterns: ${this.namaSitusJudi.size}`);
     return this.namaSitusJudi.size;
   }
   
@@ -316,23 +308,16 @@ class JudolDetector {
    * @return {Object} - Objek dengan informasi deteksi: {is_judol, confidence, reasons}
    */
   detectJudolComment(text) {
-    // **** AWAL LOGGING TAMBAHAN ****
-    console.log(`[JudolDetector] Received text: "${text ? text.substring(0, 100) : ''}..."`);
     if (!text || text.trim().length < 5) {
-      console.log("[JudolDetector] Text too short or empty, returning false.");
       return { is_judol: false, confidence: 0.0, reasons: [] };
     }
 
     const { originalPreservedSymbols, normalizedAscii } = this._normalizeText(text);
-    console.log(`[JudolDetector] Normalized ASCII: "${normalizedAscii ? normalizedAscii.substring(0, 100) : ''}..."`);
     const normalizedNoSpace = normalizedAscii.replace(/\s+/g, '');
     const cleanNormalizedAscii = normalizedAscii.replace(/[^\w\s]/g, '');
-    // **** AKHIR LOGGING TAMBAHAN ****
 
     const reasons = [];
     let isStrongJudolIndicator = false; 
-
-    // **** PENYESUAIAN LOGIKA DETEKSI ****
 
     // 0. Cek Langsung Pola Eksplisit dari namaSitusJudi (Setelah Normalisasi Dasar)
     // Ini harus menjadi prioritas tinggi.
@@ -345,7 +330,6 @@ class JudolDetector {
         const patternLower = sitePattern.toLowerCase(); // Pola asli lowercase
         
         if (nfcText.includes(patternLower)) {
-            console.log(`[JudolDetector] STRONG MATCH: NFC Text "${nfcText.substring(0,100)}..." contains explicit pattern: "${patternLower}"`);
             reasons.push(`Pola judol eksplisit terdeteksi: ${sitePattern}`);
             return { is_judol: true, confidence: 0.99, reasons: [...new Set(reasons)] }; // Langsung return jika ada strong match
         }
@@ -353,13 +337,10 @@ class JudolDetector {
         // Cek juga versi normalisasi ASCII (seperti sebelumnya)
         const normalizedSitePattern = this._normalizeText(sitePattern).normalizedAscii.replace(/\s+/g, '');
         if (normalizedSitePattern.length > 2 && initialNormalizedText.replace(/\s+/g, '').includes(normalizedSitePattern)) {
-            console.log(`[JudolDetector] STRONG MATCH (Normalized): Normalized text contains normalized pattern: "${normalizedSitePattern}"`);
             reasons.push(`Pola judol eksplisit (normalisasi) terdeteksi: ${sitePattern}`);
             return { is_judol: true, confidence: 0.98, reasons: [...new Set(reasons)] }; // Langsung return
         }
     }
-
-    // **** AKHIR PENYESUAIAN ****
 
     // *** ATURAN HEURISTIK (DIREVISI LAGI): Deteksi Karakter Unik Mirip Huruf/Angka ASCII ***
     let lookAlikeCount = 0;
@@ -395,8 +376,6 @@ class JudolDetector {
     for (const site of this.namaSitusJudi) {
       const siteLower = site.toLowerCase(); // Pola dari set sudah lowercase saat update/load
       if (normalizedNoSpace.includes(siteLower)) {
-        // **** LOG PENCOCOKAN ****
-        console.log(`[JudolDetector] Site match found! Text (no space): "${normalizedNoSpace}" includes pattern: "${siteLower}"`);
         if (!reasons.some(r => r.includes(site))) {
           reasons.push(`Nama situs judi terdeteksi: ${site}`);
           siteDetected = true; // Tandai jika nama situs terdeteksi
@@ -417,7 +396,6 @@ class JudolDetector {
 
     // Cek konteks normal HANYA jika tidak ada indikator kuat SEJAUH INI (setelah cek pola eksplisit)
     if (reasons.length === 0 && this._isNormalPositiveComment(cleanNormalizedAscii)) {
-        console.log("[JudolDetector] Classified as normal positive comment.");
         return { is_judol: false, confidence: 0.0, reasons: ["Terdeteksi sebagai komentar positif normal"] };
     }
 

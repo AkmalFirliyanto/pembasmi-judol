@@ -12,12 +12,8 @@ const detector = new JudolDetector();
 
 // Fungsi untuk melakukan inisialisasi setelah pengaturan dimuat
 function initializeExtensionFeatures() {
-  console.log(`Initializing features. autoRemove status: ${autoRemove}`);
-
-  // Jalankan pemindaian awal jika autoRemove aktif saat ini dan di halaman video/shorts
   const isVideoOrShortsPage = window.location.href.includes('youtube.com/watch') || window.location.href.includes('youtube.com/shorts/');
   if (autoRemove && isVideoOrShortsPage) {
-    console.log("Initial auto-scan triggered on video/shorts page.");
     setTimeout(() => {
       scanForJudolComments(true).catch(err => console.error("Error during initial auto-scan:", err));
     }, 3000);
@@ -28,7 +24,6 @@ function initializeExtensionFeatures() {
 
   // Inisialisasi observer komentar jika di halaman video/shorts
   if (isVideoOrShortsPage) {
-    console.log("Setting up comments observer on initial load (video/shorts).");
     setTimeout(setupCommentsObserver, 3000); // Tunggu DOM sedikit
   }
 }
@@ -36,8 +31,6 @@ function initializeExtensionFeatures() {
 // Dapatkan pengaturan dari storage LALU inisialisasi fitur
 chrome.storage.local.get(['judolPatterns', 'whitelistPatterns', 'autoRemove'], function(result) {
   if (chrome.runtime.lastError) {
-    console.error("Error getting initial settings:", chrome.runtime.lastError);
-    // Set default jika gagal ambil dari storage
     judolPatterns = [];
     whitelistPatterns = [];
     autoRemove = false;
@@ -46,7 +39,6 @@ chrome.storage.local.get(['judolPatterns', 'whitelistPatterns', 'autoRemove'], f
     judolPatterns = result.judolPatterns || [];
     whitelistPatterns = result.whitelistPatterns || [];
     autoRemove = result.autoRemove || false;
-    console.log("Initial settings loaded:", { autoRemove });
   }
   // Panggil inisialisasi SETELAH mendapatkan nilai autoRemove
   initializeExtensionFeatures();
@@ -56,7 +48,6 @@ chrome.storage.local.get(['judolPatterns', 'whitelistPatterns', 'autoRemove'], f
 chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
   // Cek apakah ekstensi valid
   try {
-    // Periksa validitas ekstensi secara eksplisit
     if (chrome.runtime.id) {
       isExtensionValid = true;
     } else {
@@ -112,8 +103,6 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
       return true;
     } else if (request.action === "autoRemoveUpdated") {
       autoRemove = request.value;
-      console.log("Auto-remove diperbarui:", autoRemove);
-      
       if (autoRemove) {
         // Panggil scan sekali saat diaktifkan
         scanForJudolComments(true).catch(err => {
@@ -169,25 +158,16 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
     } else if (request.action === "markAsJudol") {
       if (request.text) {
         try {
-          console.log("Handling new judol pattern addition:", request.text);
-          
-          // 1. Tambahkan pola baru ke array lokal terlebih dahulu
           if (!judolPatterns.includes(request.text)) {
             judolPatterns.push(request.text);
-            console.log(`Pattern "${request.text}" added to local patterns array`);
             
-            // 2. Update detector - penting dilakukan sebelum scan
             if (typeof detector.updatePatterns === 'function') {
               const patternCount = detector.updatePatterns(judolPatterns, whitelistPatterns);
-              console.log(`Detector updated with new patterns. Total patterns: ${patternCount}`);
             } else {
               console.error("detector.updatePatterns is not a function! This is a critical error.");
             }
             
-            // 3. Cari secara langsung komentar yang cocok dengan pola yang baru ditambahkan
-            console.log("Searching for comments matching the new pattern...");
             const commentElements = document.querySelectorAll('ytd-comment-thread-renderer');
-            console.log(`Examining ${commentElements.length} comments for new pattern match`);
             
             let matchedComments = [];
             commentElements.forEach(comment => {
@@ -196,56 +176,28 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
                 if (commentContent) {
                   const commentText = commentContent.innerText || "";
                   
-                  // **** LOGGING DETEKSI MANUAL SETELAH UPDATE ****
-                  console.log(`[markAsJudol] Checking comment: "${commentText.substring(0, 50)}..." against new pattern: "${request.text}"`);
-                  const directPatternMatch = commentText.toLowerCase().includes(request.text.toLowerCase());
-                  console.log(`[markAsJudol] Direct pattern match: ${directPatternMatch}`);
-                  
-                  console.log("[markAsJudol] Testing with JudolDetector.detectJudolComment on current comment text:");
                   const detectorResultOnComment = detector.detectJudolComment(commentText);
-                  console.log("[markAsJudol] Detector result on comment:", detectorResultOnComment);
                   
-                  console.log(`[markAsJudol] Testing new pattern "${request.text}" with JudolDetector.detectJudolComment (as if it's a comment):`);
-                  const detectorResultOnPattern = detector.detectJudolComment(request.text);
-                  console.log("[markAsJudol] Detector result on pattern text:", detectorResultOnPattern);
-                  // **** AKHIR LOGGING DETEKSI MANUAL ****
-                  
-                  // Kondisi pencocokan diubah:
-                  // 1. Ada direct match dengan pola yang diinput (request.text)
-                  // 2. ATAU, teks komentar saat ini dideteksi sebagai judol OLEH detector DAN mengandung bagian dari pola yang diinput (lebih permisif untuk variasi emoji/font)
-                  let isMatchForNewPattern = directPatternMatch; // Mulai dengan direct match
+                  let isMatchForNewPattern = commentText.toLowerCase().includes(request.text.toLowerCase());
 
                   if (!isMatchForNewPattern && detectorResultOnComment.is_judol) {
-                    // Jika tidak ada direct match, TAPI komentar ini judol menurut detector,
-                    // coba cek apakah teks komentar mengandung inti dari request.text (setelah normalisasi sederhana)
-                    // Ini untuk kasus seperti request.text = "💞ALEXIS-17💞" dan commentText = "... 💞𝘼LEXIS-17💞 ... lainnya"
-                    const corePattern = request.text.replace(/[\W_]+/g, "").toLowerCase(); // Ambil inti alfanumerik dari pattern
-                    const commentCoreText = commentText.replace(/[\W_]+/g, "").toLowerCase(); // Ambil inti alfanumerik dari komentar
-                    if (commentCoreText.includes(corePattern) && corePattern.length > 3) { // Pastikan core pattern cukup panjang
-                      console.log(`[markAsJudol] Permissive match: commentCoreText "${commentCoreText}" includes corePattern "${corePattern}"`);
+                    const corePattern = request.text.replace(/[^\w\d]+/g, "").toLowerCase(); 
+                    const commentCoreText = commentText.replace(/[^\w\d]+/g, "").toLowerCase();
+                    if (commentCoreText.includes(corePattern) && corePattern.length > 2) {
                       isMatchForNewPattern = true;
                     }
                   }
 
                   if (isMatchForNewPattern) {
-                    console.log(`Found matching comment for NEW PATTERN: "${commentText.slice(0, 50)}..."`);
                     matchedComments.push(comment);
                     
-                    // Tandai komentar yang terdeteksi
-                    comment.style.border = '2px solid red';
-                    comment.style.backgroundColor = 'rgba(255, 0, 0, 0.05)';
-                    
-                    // Jika autoRemove diaktifkan, sembunyikan komentar
                     if (autoRemove) {
-                      console.log("Auto-remove active, hiding matching comment");
                       comment.style.display = 'none';
                       comment.setAttribute('data-hidden-by-judol-cleaner', 'true');
                     }
                     
-                    // Tambahkan ke daftar terdeteksi jika belum ada
                     if (!detectedComments.includes(comment)) {
                       detectedComments.push(comment);
-                      console.log("Comment added to detected list");
                     }
                   }
                 }
@@ -254,22 +206,15 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
               }
             });
             
-            console.log(`Found ${matchedComments.length} comments matching the new pattern`);
-            
-            // 4. Jalankan scan lengkap untuk menangkap yang mungkin terlewat
             setTimeout(() => {
-              console.log("Running full scan to catch any missed comments...");
               scanForJudolComments(true).then(() => {
-                console.log("Full scan after pattern addition completed");
               }).catch(err => {
                 console.error("Error during full scan after pattern addition:", err);
               });
             }, 500);
           } else {
-            console.log(`Pattern "${request.text}" already exists in local patterns`);
           }
           
-          // 5. Simpan ke storage permanen melalui background
           chrome.runtime.sendMessage({
             action: "addJudolPattern", 
             pattern: request.text
@@ -278,7 +223,6 @@ chrome.runtime.onMessage.addListener(function(request, sender, sendResponse) {
               console.error("Error saving pattern to storage:", chrome.runtime.lastError);
               return;
             }
-            console.log("Pattern successfully saved to permanent storage");
           });
         } catch (err) {
           console.error("Error processing new judol pattern:", err);
@@ -345,24 +289,18 @@ function debounce(func, wait) {
 // Debounced scan function
 const debouncedScan = debounce(() => {
   const isVideoOrShortsPage = window.location.href.includes('youtube.com/watch') || window.location.href.includes('youtube.com/shorts/');
-  // Tambahkan log di sini untuk memeriksa kondisi sebelum scan
-  console.log(`Debounced scan check: autoRemove=${autoRemove}, isExtensionValid=${isExtensionValid}, isVideoOrShortsPage=${isVideoOrShortsPage}`);
   if (autoRemove && isExtensionValid && isVideoOrShortsPage) {
-    console.log("Debounced scan triggered by observer or navigation - PERFORMING SCAN.");
     scanForJudolComments(true).catch(err => {
       console.error("Error in debounced auto-scan:", err);
     });
-  } else {
-    console.log("Debounced scan conditions not met, skipping scan.");
   }
-}, 1500); // Tunggu 1.5 detik setelah perubahan terakhir
+}, 1500);
 
 // Observer untuk mendeteksi komentar baru
 let commentObserver = null;
 function setupCommentsObserver() {
   const isVideoOrShortsPage = window.location.href.includes('youtube.com/watch') || window.location.href.includes('youtube.com/shorts/');
   if (!isExtensionValid || !isVideoOrShortsPage) {
-      console.log(`Skipping comments observer setup: isExtensionValid=${isExtensionValid}, isVideoOrShortsPage=${isVideoOrShortsPage}`);
       return;
   }
 
@@ -384,7 +322,6 @@ function setupCommentsObserver() {
   });
 
   if (targetNodes.length === 0) {
-    console.log("No target nodes for comments found. Retrying...");
     setTimeout(setupCommentsObserver, 2000); // Coba lagi setelah 2 detik
     return;
   }
@@ -436,9 +373,7 @@ function setupCommentsObserver() {
     
     // Scan dipicu jika ada komentar baru atau komentar container menjadi terlihat
     if ((commentAdded || commentsVisible) && autoRemove) {
-      console.log(`Observer detected changes: commentAdded=${commentAdded}, commentsVisible=${commentsVisible}`);
-      console.log("Observer-triggered scan started");
-      debouncedScan(); // Panggil scan yang sudah di-debounce
+      debouncedScan();
     }
   };
 
@@ -452,15 +387,12 @@ function setupCommentsObserver() {
     }
   });
   
-  console.log(`Comments observer started on ${targetNodes.length} container nodes.`);
-  
   // Scroll event listener untuk memastikan scan ketika pengguna scroll
   // YouTube sering memuat komentar baru saat scroll
   const scrollHandler = debounce(() => {
     if (autoRemove && isExtensionValid && 
         (window.location.href.includes('youtube.com/watch') || 
          window.location.href.includes('youtube.com/shorts/'))) {
-      console.log("Scroll-triggered scan started");
       scanForJudolComments(true).catch(err => {
         console.error("Error in scroll-triggered scan:", err);
       });
@@ -470,44 +402,34 @@ function setupCommentsObserver() {
   // Tambahkan scroll listener jika belum ada
   window.removeEventListener('scroll', scrollHandler); // Hapus yang mungkin sudah ada
   window.addEventListener('scroll', scrollHandler);
-  console.log("Scroll event listener installed.");
 }
 
 // --- PINDAHKAN LISTENER NAVIGASI KE FUNGSI SENDIRI ---
 let navigationObserver = null; // Simpan referensi observer
 function setupNavigationListener() {
   if (navigationObserver) {
-     console.log("Navigation listener already set up.");
-     return; // Hindari duplikasi listener
+     return;
   }
-  console.log("Setting up navigation listener.");
   let lastUrl = location.href;
   navigationObserver = new MutationObserver(() => {
     const url = location.href;
     if (url !== lastUrl) {
       lastUrl = url;
-      console.log(`Navigation detected to: ${url}`);
       const isVideoOrShortsPage = url.includes('youtube.com/watch') || url.includes('youtube.com/shorts/');
       if (isVideoOrShortsPage) {
-        console.log("Navigated to video/shorts page. Resetting and potentially scanning.");
         setTimeout(() => {
           detectedComments = [];
           setupCommentsObserver(); // Setup observer komentar lagi
-          console.log(`Navigation scan check: autoRemove=${autoRemove}`);
           if (autoRemove) {
-            console.log("Auto-scanning after navigation - QUEUING SCAN.");
             scanForJudolComments(true).catch(err => {
               console.error("Error scanning after navigation:", err);
             });
-          } else {
-            console.log("Auto-scanning after navigation skipped (autoRemove is false).");
           }
         }, 1500);
       } else {
         if (commentObserver) {
           commentObserver.disconnect();
           commentObserver = null;
-          console.log("Comments observer stopped (not a video page).");
         }
       }
     }
@@ -520,11 +442,9 @@ function setupNavigationListener() {
 async function scanForJudolComments(autoRemoveMode = false) {
   if (!isExtensionValid) return (detectedComments ? detectedComments.length : 0);
   if (isScanning) {
-      console.log("Scan attempt skipped: another scan is already in progress.");
       return (detectedComments ? detectedComments.length : 0);
   }
   isScanning = true;
-  console.log("Starting scan... autoRemoveMode:", autoRemoveMode);
   
   try {
     // Update detector with current patterns
@@ -532,26 +452,18 @@ async function scanForJudolComments(autoRemoveMode = false) {
       detector.updatePatterns(judolPatterns, whitelistPatterns);
     }
     
-    console.log("Waiting for comment section before querying...");
     const commentSection = await waitForCommentSection(); 
     if (!commentSection) {
-      console.log("Comment section not found after waiting, aborting scan.");
       isScanning = false;
       return 0;
     }
-    console.log("Comment section found. Proceeding to wait for first comment...");
 
-    // **** TAMBAHAN: Tunggu elemen komentar PERTAMA ****
     const firstCommentElement = await waitForFirstCommentElement();
     if (!firstCommentElement) {
-       console.log("First comment element not found after waiting, aborting scan for now.");
        isScanning = false;
-       return (detectedComments ? detectedComments.length : 0); // Kembalikan count saat ini jika komentar pertama tidak muncul
+       return (detectedComments ? detectedComments.length : 0);
     }
-    console.log("First comment element found. Proceeding with querySelectorAll...");
-    // **** AKHIR TAMBAHAN ****
 
-    // Lakukan query SETELAH menunggu section DAN komentar pertama
     const commentElements = document.querySelectorAll('ytd-comment-thread-renderer');
     console.log("Number of comment elements found:", commentElements.length);
     
@@ -586,8 +498,6 @@ async function scanForJudolComments(autoRemoveMode = false) {
           // Hanya tambahkan ke daftar jika belum ada
           if (!detectedComments.includes(comment)) {
             detectedComments.push(comment);
-            console.log(`Komentar judol terdeteksi (Conf: ${detectionResult.confidence.toFixed(2)}):`, commentText.slice(0, 50) + "...");
-            console.log("Alasan:", detectionResult.reasons.join(', '));
           }
           
           // Tandai komentar yang terdeteksi
@@ -597,7 +507,6 @@ async function scanForJudolComments(autoRemoveMode = false) {
           // Jika autoRemove diaktifkan, sembunyikan komentar
           if (autoRemove) {
             comment.style.display = 'none';
-            console.log("Komentar judol dihapus otomatis");
           }
         } else {
            // Opsional: Hapus border jika sebelumnya ditandai tapi sekarang tidak terdeteksi
@@ -631,7 +540,6 @@ async function scanForJudolComments(autoRemoveMode = false) {
       }
     }
     
-    console.log("Total komentar judol terdeteksi:", (detectedComments ? detectedComments.length : 0));
   } catch (err) {
     console.error("Error dalam scanForJudolComments:", err);
     if (err.message && err.message.includes("Extension context invalidated")) {
@@ -639,7 +547,6 @@ async function scanForJudolComments(autoRemoveMode = false) {
     }
   } finally {
     isScanning = false;
-    console.log("Scan finished.");
   }
   
   return (detectedComments ? detectedComments.length : 0);
@@ -650,7 +557,6 @@ async function removeJudolComments() {
   if (!isExtensionValid) return 0;
   let count = 0;
   const commentsToRemove = detectedComments.slice(); // Salin array agar tidak terpengaruh perubahan selama iterasi
-  console.log(`Attempting to remove ${commentsToRemove.length} detected comments.`);
 
   for (const commentElement of commentsToRemove) {
     try {
@@ -663,16 +569,13 @@ async function removeJudolComments() {
         // Tambahkan atribut untuk menandai bahwa elemen disembunyikan oleh ekstensi
         commentElement.setAttribute('data-hidden-by-judol-cleaner', 'true');
         count++;
-        console.log("Comment hidden:", commentElement.querySelector('#content-text')?.textContent?.substring(0, 50) + "...");
       } else {
-         console.log("Skipping removal, comment element not connected or invalid.");
       }
     } catch (error) {
       console.error("Error removing comment:", error, commentElement);
       // Jika konteks hilang, hentikan proses
       if (error.message && error.message.includes("Extension context invalidated")) {
         isExtensionValid = false;
-        console.log("Stopping removal due to invalidated context.");
         break; // Keluar dari loop
       }
     }
@@ -691,22 +594,18 @@ async function removeJudolComments() {
      }
   }
 
-  console.log(`${count} judol comments removed (hidden).`);
   return count;
 }
 
 // Fungsi untuk mengembalikan komentar yang disembunyikan
 function restoreHiddenComments() {
   if (!isExtensionValid) return;
-  console.log("Restoring previously hidden comments.");
   try {
     const hiddenComments = document.querySelectorAll('[data-hidden-by-judol-cleaner="true"]');
     hiddenComments.forEach(comment => {
       comment.style.display = ''; // Kembalikan display
       comment.removeAttribute('data-hidden-by-judol-cleaner'); // Hapus atribut penanda
     });
-    console.log(`${hiddenComments.length} comments restored.`);
-    detectedComments = []; // Kosongkan daftar setelah dikembalikan
   } catch (error) {
      console.error("Error restoring comments:", error);
      if (error.message && error.message.includes("Extension context invalidated")) {
@@ -729,7 +628,6 @@ function waitForCommentSection() {
       
       tries++;
       if (tries >= maxTries) {
-        console.log("waitForCommentSection timed out.");
         return resolve(null);
       }
       
@@ -745,13 +643,11 @@ function waitForFirstCommentElement() {
   return new Promise((resolve) => {
     const maxTries = 20; // Batas percobaan
     let tries = 0;
-    console.log("[waitForFirstCommentElement] Starting wait...");
 
     const checkForFirstComment = () => {
       try {
         // Periksa validitas konteks
         if (!chrome.runtime.id) {
-           console.log("[waitForFirstCommentElement] Context invalidated.");
            return resolve(null); // Gagal jika konteks hilang
         }
         
@@ -759,17 +655,14 @@ function waitForFirstCommentElement() {
         const firstComment = document.querySelector('#comments ytd-comment-thread-renderer, ytd-engagement-panel-section-list-renderer[target-id="engagement-panel-comments-section"] ytd-comment-thread-renderer');
         
         if (firstComment) {
-          console.log("[waitForFirstCommentElement] First comment element found!");
           return resolve(firstComment); // Berhasil
         }
       } catch (error) {
-         console.error("[waitForFirstCommentElement] Error checking for comment:", error);
          return resolve(null); // Gagal jika ada error query
       }
       
       tries++;
       if (tries >= maxTries) {
-        console.log("[waitForFirstCommentElement] Timed out waiting for first comment.");
         return resolve(null); // Gagal jika timeout
       }
       
